@@ -50,6 +50,10 @@ export default function Home() {
             <code>POST /api/sms</code>
           </div>
           <div className="row">
+            <span className="label">SMS opt-in</span>
+            <code>/sms-consent?to=+15551234567</code>
+          </div>
+          <div className="row">
             <span className="label">Health</span>
             <code>GET /api/health</code>
           </div>
@@ -67,4 +71,3 @@ export default function Home() {
     </>
   );
 }
-

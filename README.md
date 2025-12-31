@@ -93,6 +93,14 @@ Set:
 
 This enables Twilio request signature validation (rejects spoofed webhook requests).
 
+## 6.5) SMS opt-in (for toll-free verification)
+
+This app includes a public opt-in page that records consent in Supabase:
+
+- `GET /sms-consent?to=+15551234567`
+
+Voice calls also include an opt-in prompt (“Press 1…”) before dialing the owner; outbound “missed call” follow-up SMS is only sent when consent is recorded.
+
 ## 7) Deployment recommendation
 
 Deploy to Vercel (free):

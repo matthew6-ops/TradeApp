@@ -72,7 +72,7 @@ export default async function handler(req, res) {
     });
 
     const twiml = new MessagingResponse();
-    twiml.message("Got it — thanks! We’ll reach out ASAP.");
+    twiml.message("Got it — thanks! We’ll reach out ASAP. Reply STOP to opt out.");
     res.setHeader("Content-Type", "text/xml");
     res.status(200).send(twiml.toString());
   } catch (err) {
@@ -80,4 +80,3 @@ export default async function handler(req, res) {
     res.status(500).send("Server error");
   }
 }
-

@@ -1,4 +1,4 @@
-import { getBusinessByTwilioNumber, insertEvent } from "../../lib/supabase.js";
+import { getBusinessByTwilioNumber, hasSmsConsent, insertEvent, insertSmsConsent } from "../../lib/supabase.js";
 import { VoiceResponse, normalizeE164, twilioClient, getBaseUrl, validateTwilioSignatureIfEnabled } from "../../lib/twilio.js";
 import { parseUrlEncoded, readRawBody } from "../../lib/twilioBody.js";
 
@@ -49,6 +49,59 @@ export default async function handler(req, res) {
       });
 
       const base = getBaseUrl(req);
+      const dialUrl = base ? `${base}/api/voice?stage=dial` : "/api/voice?stage=dial";
+      const consentUrl = base ? `${base}/api/voice?stage=consent` : "/api/voice?stage=consent";
+
+      const customerPhone = normalizeE164(fromNumber);
+      const alreadyConsented = customerPhone ? await hasSmsConsent({ businessId: business.id, customerPhone }) : false;
+
+      const twiml = new VoiceResponse();
+      if (alreadyConsented) {
+        twiml.redirect({ method: "POST" }, dialUrl);
+      } else {
+        const gather = twiml.gather({ numDigits: 1, timeout: 5, action: consentUrl, method: "POST" });
+        gather.say(
+          `Press 1 to opt in to receive a single text message from ${business.name} if we miss your call. ` +
+            "Message and data rates may apply. Reply STOP to opt out."
+        );
+        twiml.redirect({ method: "POST" }, dialUrl);
+      }
+
+      res.setHeader("Content-Type", "text/xml");
+      res.status(200).send(twiml.toString());
+      return;
+    }
+
+    if (stage === "consent") {
+      const digits = String(body.Digits || "");
+      const customerPhone = normalizeE164(fromNumber);
+
+      if (digits === "1" && customerPhone) {
+        await insertSmsConsent({
+          businessId: business.id,
+          customerPhone,
+          ip: String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || null,
+          userAgent: String(req.headers["user-agent"] || "") || null
+        });
+
+        await insertEvent({
+          businessId: business.id,
+          type: "sms_opt_in",
+          payload: { callSid, from: customerPhone, via: "voice_gather" }
+        });
+      }
+
+      const base = getBaseUrl(req);
+      const dialUrl = base ? `${base}/api/voice?stage=dial` : "/api/voice?stage=dial";
+      const twiml = new VoiceResponse();
+      twiml.redirect({ method: "POST" }, dialUrl);
+      res.setHeader("Content-Type", "text/xml");
+      res.status(200).send(twiml.toString());
+      return;
+    }
+
+    if (stage === "dial") {
+      const base = getBaseUrl(req);
       const actionUrl = base ? `${base}/api/voice?stage=dial_end` : "/api/voice?stage=dial_end";
 
       const twiml = new VoiceResponse();
@@ -71,19 +124,31 @@ export default async function handler(req, res) {
       });
 
       if (missed) {
-        const autoTextBody = "Sorry we missed your call — what do you need help with? Reply with the job + address.";
+        const customerPhone = normalizeE164(fromNumber);
+        const consented = customerPhone ? await hasSmsConsent({ businessId: business.id, customerPhone }) : false;
 
-        await twilioClient.messages.create({
-          to: normalizeE164(fromNumber),
-          from: normalizeE164(business.twilio_number),
-          body: autoTextBody
-        });
+        if (consented) {
+          const autoTextBody =
+            "Sorry we missed your call — what do you need help with? Reply with the job + address. Reply STOP to opt out.";
 
-        await insertEvent({
-          businessId: business.id,
-          type: "auto_text_sent",
-          payload: { callSid, toCustomer: fromNumber, fromBusiness: business.twilio_number }
-        });
+          await twilioClient.messages.create({
+            to: customerPhone,
+            from: normalizeE164(business.twilio_number),
+            body: autoTextBody
+          });
+
+          await insertEvent({
+            businessId: business.id,
+            type: "auto_text_sent",
+            payload: { callSid, toCustomer: customerPhone, fromBusiness: business.twilio_number }
+          });
+        } else {
+          await insertEvent({
+            businessId: business.id,
+            type: "auto_text_skipped_no_consent",
+            payload: { callSid, toCustomer: customerPhone, fromBusiness: business.twilio_number }
+          });
+        }
       }
 
       const twiml = new VoiceResponse();
@@ -99,4 +164,3 @@ export default async function handler(req, res) {
     res.status(500).send("Server error");
   }
 }
-
