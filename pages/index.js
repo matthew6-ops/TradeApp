@@ -31,6 +31,17 @@ export default function Home() {
         </section>
 
         <section className="card">
+          <h2>Mobile app (PWA)</h2>
+          <p className="muted">Open the fast, on-the-go lead inbox + schedule UI.</p>
+          <div className="row">
+            <span className="label">App</span>
+            <a className="topLink" href="/app">
+              Open /app
+            </a>
+          </div>
+        </section>
+
+        <section className="card">
           <h2>What happens</h2>
           <ol className="list">
             <li>Customer calls a Twilio number.</li>

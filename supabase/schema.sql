@@ -51,3 +51,55 @@ create table if not exists public.sms_consents (
 create index if not exists sms_consents_business_id_idx on public.sms_consents (business_id);
 create index if not exists sms_consents_customer_phone_idx on public.sms_consents (customer_phone);
 create index if not exists sms_consents_consented_at_idx on public.sms_consents (consented_at);
+
+-- ---------------------------------------------------------------------------
+-- “Mobile app” tables (lightweight dispatch CRM)
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.technicians (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses(id) on delete cascade,
+  name text not null,
+  phone text,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists technicians_business_id_idx on public.technicians (business_id);
+create index if not exists technicians_active_idx on public.technicians (active);
+
+alter table public.leads add column if not exists customer_name text;
+alter table public.leads add column if not exists job_address text;
+alter table public.leads add column if not exists assigned_tech_id uuid references public.technicians(id) on delete set null;
+
+create index if not exists leads_assigned_tech_id_idx on public.leads (assigned_tech_id);
+create index if not exists leads_status_idx on public.leads (status);
+
+create table if not exists public.lead_notes (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses(id) on delete cascade,
+  lead_id uuid not null references public.leads(id) on delete cascade,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists lead_notes_business_id_idx on public.lead_notes (business_id);
+create index if not exists lead_notes_lead_id_idx on public.lead_notes (lead_id);
+create index if not exists lead_notes_created_at_idx on public.lead_notes (created_at);
+
+create table if not exists public.appointments (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses(id) on delete cascade,
+  lead_id uuid references public.leads(id) on delete set null,
+  title text,
+  address text,
+  starts_at timestamptz not null,
+  ends_at timestamptz,
+  status text not null default 'scheduled',
+  assigned_tech_id uuid references public.technicians(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists appointments_business_id_idx on public.appointments (business_id);
+create index if not exists appointments_starts_at_idx on public.appointments (starts_at);
+create index if not exists appointments_status_idx on public.appointments (status);
